@@ -22,6 +22,9 @@ Moonshine is speach recognition tool tailored for live translation, smaller run 
 C++ zero dependancy implementation
 
 
+### Other links
+[Low power fpga techniques paper](https://www.doc.ic.ac.uk/~wl/papers/08/ahs08jl.pdf)
+
 ## Benchmarking
 
 ## Sections
