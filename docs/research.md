@@ -10,8 +10,13 @@
 
 ## Useful links
 
+### Open AI Whisper 
+[Github](https://github.com/openai/whisper)
+
+[Paper](https://arxiv.org/abs/2212.04356)
+
 ### Moonshine
-[Moonshine Github](https://github.com/moonshine-ai/moonshine) 
+[Moonshine Github](https://github.com/moonshine-ai/moonshine)
 
 [Moonshine paper](https://arxiv.org/abs/2410.15608)
 
