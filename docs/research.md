@@ -201,3 +201,72 @@ nn.Linear(4 * n_state, n_state),
 - e.g hold x and q  and store new x - if we have more memory we can fetch k in this time and double-buffer
 
 
+### GPT Model Size Analysis
+
+For `tiny.en`
+
+**Core dims (`tiny.en`)**
+- `n_mels=80`
+- `n_audio_ctx=1500`
+- `n_audio_state=384`
+- `n_audio_head=6` → `head_dim=64`
+- `n_audio_layer=4`
+- `n_text_ctx=448`
+- `n_text_state=384`
+- `n_text_head=6` → `head_dim=64`
+- `n_text_layer=4`
+- `n_vocab=51864`
+
+**Mel / audio pipeline**
+- 30s audio samples: `480000`
+- Mel frames: `3000`
+- Mel filterbank: `80 x 201` (`whisper/assets/mel_filters.npz`)
+- Log-mel input to encoder: `[B, 80, 3000]`
+- After `conv1 (80→384, k=3)`: `[B, 384, 3000]`
+- After `conv2 (384→384, k=3, stride=2)`: `[B, 384, 1500]`
+- Encoder sequence output: `[B, 1500, 384]`
+
+**Q/K/V matrices (all attention modules)**
+Each attention module in Whisper uses:
+- `Q`: weight `[384, 384]` + bias `[384]`
+- `K`: weight `[384, 384]` (no bias)
+- `V`: weight `[384, 384]` + bias `[384]`
+- `Out`: weight `[384, 384]` + bias `[384]`
+
+Per matrix sizes:
+- One `384x384` weight = `147,456` params
+- One such weight storage:
+  - FP16: `0.28125 MiB`
+  - FP32: `0.5625 MiB`
+
+Per attention module total params:
+- `590,976` params (`Q+K+V+Out` + biases where present)
+
+Runtime attention tensor shapes:
+- Encoder self-attn: `q,k,v` projected as `[B,1500,384]`, reshaped `[B,6,1500,64]`
+- Decoder self-attn (token length `T`): `[B,6,T,64]`
+- Decoder cross-attn:
+  - `q`: `[B,6,T,64]`
+  - `k,v` from audio: `[B,6,1500,64]`
+  - attention scores: `[B,6,T,1500]`
+
+**Layer parameter counts**
+- `encoder.conv1`: `92,544`
+- `encoder.conv2`: `442,752`
+- One encoder block: `1,774,080`
+- All 4 encoder blocks: `7,096,320`
+- Encoder total: `7,632,384`
+
+- `decoder.token_embedding`: `19,915,776`
+- `decoder.positional_embedding`: `172,032`
+- One decoder block (self-attn + cross-attn + MLP + norms): `2,365,824`
+- All 4 decoder blocks: `9,463,296`
+- Decoder total: `29,551,872`
+
+**Total model params**
+- `37,184,256` params
+
+Approx weight size:
+- FP16: `70.92 MiB`
+- FP32: `141.85 MiB`
+
