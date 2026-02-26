@@ -270,3 +270,35 @@ Approx weight size:
 - FP16: `70.92 MiB`
 - FP32: `141.85 MiB`
 
+
+
+
+## Components In MASE 
+- conv1d ❌
+- gelu ✅
+- quantiser ✅ (fixed_cast)
+- layer norm ✅
+- embedding hash table ❌
+- self attention ✅
+- cross attention 
+- linear ✅
+- softmax ✅
+- mat mul ✅
+- log-mel unit ❌
+
+
+### Log-Mel Generation
+NFFT = 400
+HOP_LENGTH = 160
+1. Convert input audio into an array of samples 
+2. Hann-Window $w[n] = \frac{1}{2}\ \left[1 - \cos \left( \frac{2 \pi n}{N - 1} \right)\right] =\sin^2 \left( \frac{\pi n}{N - 1} \right)$ 
+	$y[n] = x[n] \cdot w[n]$
+	- Lookup table memory with window coefficients 
+	- Simple element wise multiplication block can 
+3. STFT (Short time Fourier transform ) 
+	 Compute the FFT on different overlapping windows
+4. Mat Mul With mel filter-bank 
+5. Take the log of each element
+
+
+
