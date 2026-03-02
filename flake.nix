@@ -6,9 +6,15 @@
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-stable }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixpkgs-stable,
+    }:
     let
-      devShellFor = system:
+      devShellFor =
+        system:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -21,15 +27,18 @@
           isLinux = pkgs.stdenv.isLinux;
         in
         pkgs.mkShell {
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath ([
-            pkgs.stdenv.cc.cc
-            pkgs.zlib
-            pkgs.glib
-            pkgs.libGL
-            pkgs.libxml2
-          ] ++ pkgs.lib.optionals isLinux [
-            pkgs.cudaPackages.cudatoolkit
-          ]);
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
+            [
+              pkgs.stdenv.cc.cc
+              pkgs.zlib
+              pkgs.glib
+              pkgs.libGL
+              pkgs.libxml2
+            ]
+            ++ pkgs.lib.optionals isLinux [
+              pkgs.cudaPackages.cudatoolkit
+            ]
+          );
 
           buildInputs = [
             pkgs.python311
@@ -45,7 +54,8 @@
             pkgs.zlib
             pkgs.glib
             pkgs.mesa
-          ] ++ pkgs.lib.optionals isLinux [
+          ]
+          ++ pkgs.lib.optionals isLinux [
             pkgs-stable.verible
           ];
 
@@ -55,11 +65,15 @@
               ${pkgs.python311}/bin/python -m venv .venv
               source .venv/bin/activate
               pip install --upgrade pip
-              ${if isLinux then
-                ''pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128''
-              else
-                ''pip install torch torchvision torchaudio''
+              ${
+                if isLinux then
+                  "pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128"
+                else
+                  "pip install torch torchvision torchaudio"
               }
+              if [ -f requirements.txt ]; then
+                pip install -r requirements.txt
+              fi
               if [ -n "$MASE_PATH" ]; then
                 pip install -e "$MASE_PATH"
               fi
@@ -67,22 +81,22 @@
             else
               source .venv/bin/activate
               if [ ! -f ".venv/completed_init" ]; then
-                ${if isLinux then
-                  ''pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128''
-                else
-                  ''pip install torch torchvision torchaudio''
+                ${
+                  if isLinux then
+                    "pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128"
+                  else
+                    "pip install torch torchvision torchaudio"
                 }
+                if [ -f requirements.txt ]; then
+                  pip install -r requirements.txt
+                fi
                 if [ -n "$MASE_PATH" ]; then
                   pip install -e "$MASE_PATH"
                 fi
                 touch .venv/completed_init
               fi
             fi
-            ${if isLinux then
-              ''export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH''
-            else
-              ""
-            }
+            ${if isLinux then "export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH" else ""}
           '';
         };
     in
