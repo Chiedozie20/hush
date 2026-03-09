@@ -84,8 +84,9 @@ def simple_whisper_inference(path: Path) -> str:
         fp16=fp16,
         without_timestamps=True,
     )
-    encoded_audio_features = model.encoder(decode_mel.unsqueeze(0))
-    result = model.decode(encoded_audio_features[0], options)
+    with torch.inference_mode():
+        encoded_audio_features = model.encoder(decode_mel.unsqueeze(0))
+        result = model.decode(encoded_audio_features[0], options)
     return result.text
 
 

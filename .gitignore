@@ -2,3 +2,5 @@
 *.venv/
 .envrc.local
 **/__pycache__
+
+*.obsidian/

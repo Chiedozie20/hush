@@ -165,7 +165,7 @@ class ResidualAttentionBlock(nn.Module):
         kv_cache: Optional[dict] = None,
     ):
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
-        if self.cross_attn:
+        if self.cross_attn: # no cross attention for encoder block
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
         x = x + self.mlp(self.mlp_ln(x))
         return x
@@ -175,7 +175,9 @@ class AudioEncoder(nn.Module):
     def __init__(
         self, n_mels: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
     ):
+        
         super().__init__()
+        print(f" n_ctx = {n_ctx}    n_state = {n_state}   n_head = {n_head}")
         self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
         self.register_buffer("positional_embedding", sinusoids(n_ctx, n_state))
@@ -190,13 +192,17 @@ class AudioEncoder(nn.Module):
         x : torch.Tensor, shape = (batch_size, n_mels, n_ctx)
             the mel spectrogram of the audio
         """
+        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
         x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
+        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
         x = x.permute(0, 2, 1)
-
+        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
         assert x.shape[1:] == self.positional_embedding.shape, "incorrect audio shape"
+        
         x = (x + self.positional_embedding).to(x.dtype)
-
+     
+        print(f"x after + = {x.shape}")
         for block in self.blocks:
             x = block(x)
 
