@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-Minimal Whisper inference pipeline for learning.
-
-Assumptions:
-- Input must be a PCM WAV file: mono, 16-bit, 16 kHz
-- Audio length must be <= 30 seconds
-- Model is fixed to tiny.en
-- Language is fixed to English
-"""
-
 import argparse
 import wave
 from pathlib import Path
@@ -23,7 +12,6 @@ from whisper.model import Whisper
 
 
 def load_fixed_wav(path: Path) -> np.ndarray:
-    """Load a strict mono 16-bit 16kHz PCM WAV file into float32 [-1, 1]."""
     with wave.open(str(path), "rb") as wf:
         channels = wf.getnchannels()
         sample_width = wf.getsampwidth()
@@ -44,17 +32,12 @@ def load_fixed_wav(path: Path) -> np.ndarray:
             raise ValueError("Expected uncompressed PCM WAV")
         if num_frames > N_SAMPLES:
             raise ValueError("Expected audio <= 30 seconds")
-
-        # Raw little-endian PCM bytes from the WAV container.
         pcm_bytes = wf.readframes(num_frames)
-
-    # Convert int16 PCM to normalized float waveform.
     audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     return audio
 
 
 def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
-    # Learning pipeline stage: wav -> log-mel -> fixed 30s frame length.
     audio = load_fixed_wav(path)
     mel = log_mel_spectrogram(audio, n_mels=n_mels)
     mel = pad_or_trim(mel, N_FRAMES).to(device)
@@ -64,13 +47,7 @@ def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
 def simple_whisper_inference(path: Path) -> str:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_obj = torch.device(device)
-
-    # 1) Load model (fixed tiny.en)
     model: Whisper = load_model("tiny.en", device=device)
-    # Expose an explicit encode stage for learning parity with encode/decode pipelines.
-
-    # 2) Load strict WAV (fixed type, <= 30s)
-    # 3) Audio -> log-mel spectrogram
     mel = prepare_mel(path, model.dims.n_mels, device_obj)
 
 
