@@ -21,6 +21,44 @@ from whisper.audio import N_FRAMES, N_SAMPLES, SAMPLE_RATE, log_mel_spectrogram,
 from whisper.decoding import DecodingOptions
 from whisper.model import Whisper
 
+import os
+import numpy as np
+import torch
+import pandas as pd
+import whisper
+import torchaudio
+
+from tqdm.notebook import tqdm
+
+
+import jiwer
+from whisper.normalizers import EnglishTextNormalizer
+
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+class LibriSpeech(torch.utils.data.Dataset):
+    """
+    A simple class to wrap LibriSpeech and trim/pad the audio to 30 seconds.
+    It will drop the last few seconds of a very small portion of the utterances.
+    """
+    def __init__(self, split="test-clean", device=DEVICE):
+        self.dataset = torchaudio.datasets.LIBRISPEECH(
+            root=os.path.expanduser("~/.cache"),
+            url=split,
+            download=True,
+        )
+        self.device = device
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        audio, sample_rate, text, _, _, _ = self.dataset[item]
+        assert sample_rate == 16000
+        audio = whisper.pad_or_trim(audio.flatten()).to(self.device)
+        mel = whisper.log_mel_spectrogram(audio)
+        
+        return (mel, text)
 
 def load_fixed_wav(path: Path) -> np.ndarray:
     """Load a strict mono 16-bit 16kHz PCM WAV file into float32 [-1, 1]."""
@@ -90,14 +128,58 @@ def simple_whisper_inference(path: Path) -> str:
     return result.text
 
 
+def benchmark_WER(model):
+    dataset = LibriSpeech("test-clean")
+    dataset = torch.utils.data.Subset(dataset, range(10))
+    loader = torch.utils.data.DataLoader(dataset, batch_size=16)
+    print(
+    f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
+    f"and has {sum(np.prod(p.shape) for p in model.parameters()):,} parameters."
+    )
+    options = whisper.DecodingOptions(language="en", without_timestamps=True)
+
+    hypotheses = []
+    references = []
+
+    for mels, texts in tqdm(loader):
+        results = model.decode(mels, options)
+        hypotheses.extend([result.text for result in results])
+        references.extend(texts)
+    data = pd.DataFrame(dict(hypothesis=hypotheses, reference=references))
+
+    normalizer = EnglishTextNormalizer()
+    data["hypothesis_clean"] = [normalizer(text) for text in data["hypothesis"]]
+    data["reference_clean"] = [normalizer(text) for text in data["reference"]]
+    wer = jiwer.wer(list(data["reference_clean"]), list(data["hypothesis_clean"]))
+    return wer
+
 def main():
     parser = argparse.ArgumentParser(
         description="Minimal one-file Whisper pipeline (fixed WAV -> text)"
     )
-    parser.add_argument("audio_wav", type=Path, help="Path to mono 16-bit 16kHz WAV")
+    parser.add_argument(
+        "audio_wav",
+        nargs="?",
+        type=Path,
+        help="Path to mono 16-bit 16kHz WAV",
+    )
+    parser.add_argument(
+        "--test-wer",
+        action="store_true",
+        help="Run the LibriSpeech WER benchmark instead of single-file transcription",
+    )
     args = parser.parse_args()
 
-    
+    if args.test_wer:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model: Whisper = load_model("base.en", device=device)
+        wer = benchmark_WER(model)
+        print(f"WER: {wer * 100:.2f} %")
+        return
+
+    if args.audio_wav is None:
+        parser.error("audio_wav is required unless --test-wer is set")
+
     text = simple_whisper_inference(args.audio_wav)
     print(text)
 

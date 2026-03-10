@@ -34,6 +34,7 @@
               pkgs.glib
               pkgs.libGL
               pkgs.libxml2
+              pkgs.ffmpeg
             ]
             ++ pkgs.lib.optionals isLinux [
               pkgs.cudaPackages.cudatoolkit
@@ -54,6 +55,7 @@
             pkgs.zlib
             pkgs.glib
             pkgs.mesa
+            pkgs.ffmpeg
           ]
           ++ pkgs.lib.optionals isLinux [
             pkgs-stable.verible
