@@ -83,7 +83,6 @@ def load_fixed_wav(path: Path) -> np.ndarray:
         if num_frames > N_SAMPLES:
             raise ValueError("Expected audio <= 30 seconds")
 
-        # Raw little-endian PCM bytes from the WAV container.
         pcm_bytes = wf.readframes(num_frames)
 
     # Convert int16 PCM to normalized float waveform.
@@ -92,7 +91,7 @@ def load_fixed_wav(path: Path) -> np.ndarray:
 
 
 def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
-    # Learning pipeline stage: wav -> log-mel -> fixed 30s frame length.
+    # wav -> log-mel -> fixed 30s frame length.
     audio = load_fixed_wav(path)
     mel = log_mel_spectrogram(audio, n_mels=n_mels)
     mel = pad_or_trim(mel, N_FRAMES).to(device)
@@ -100,15 +99,15 @@ def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
 
 
 def simple_whisper_inference(path: Path) -> str:
+    # Example scaffold: switch "default" to "myversion" after adding your own Conv1d.
+    encoder_config = {
+        "conv1d": "default",
+    }
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_obj = torch.device(device)
 
-    # 1) Load model (fixed tiny.en)
-    model: Whisper = load_model("tiny.en", device=device)
-    # Expose an explicit encode stage for learning parity with encode/decode pipelines.
+    model: Whisper = load_model("tiny.en", device=device, encoder_config=encoder_config)
 
-    # 2) Load strict WAV (fixed type, <= 30s)
-    # 3) Audio -> log-mel spectrogram
     mel = prepare_mel(path, model.dims.n_mels, device_obj)
 
 

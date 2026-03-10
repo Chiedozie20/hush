@@ -173,12 +173,27 @@ class ResidualAttentionBlock(nn.Module):
 
 class AudioEncoder(nn.Module):
     def __init__(
-        self, n_mels: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
+        self,
+        n_mels: int,
+        n_ctx: int,
+        n_state: int,
+        n_head: int,
+        n_layer: int,
+        encoder_config: Optional[Dict[str, str]] = None,
     ):
-        
         super().__init__()
+        self.encoder_config = dict(encoder_config or {})
+        conv1d_impl = self.encoder_config.get("conv1d", "default")
+        if conv1d_impl not in {"default", "quantised"}:
+            raise ValueError(f"Unsupported encoder_config['conv1d']: {conv1d_impl!r}")
+
         print(f" n_ctx = {n_ctx}    n_state = {n_state}   n_head = {n_head}")
-        self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
+
+        if conv1d_impl == "quantised":
+            # Placeholder: swap in your handwritten Conv1d implementation here later.
+            self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
+        else:
+            self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
         self.register_buffer("positional_embedding", sinusoids(n_ctx, n_state))
 
@@ -256,7 +271,9 @@ class TextDecoder(nn.Module):
 
 
 class Whisper(nn.Module):
-    def __init__(self, dims: ModelDimensions):
+    def __init__(
+        self, dims: ModelDimensions, encoder_config: Optional[Dict[str, str]] = None
+    ):
         super().__init__()
         self.dims = dims
         self.encoder = AudioEncoder(
@@ -265,6 +282,7 @@ class Whisper(nn.Module):
             self.dims.n_audio_state,
             self.dims.n_audio_head,
             self.dims.n_audio_layer,
+            encoder_config=encoder_config,
         )
         self.decoder = TextDecoder(
             self.dims.n_vocab,

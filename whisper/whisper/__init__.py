@@ -105,6 +105,7 @@ def load_model(
     device: Optional[Union[str, torch.device]] = None,
     download_root: str = None,
     in_memory: bool = False,
+    encoder_config: Optional[dict] = None,
 ) -> Whisper:
     """
     Load a Whisper ASR model
@@ -120,6 +121,8 @@ def load_model(
         path to download the model files; by default, it uses "~/.cache/whisper"
     in_memory: bool
         whether to preload the model weights into host memory
+    encoder_config: Optional[dict]
+        optional encoder override selectors forwarded into Whisper model construction
 
     Returns
     -------
@@ -152,7 +155,7 @@ def load_model(
     del checkpoint_file
 
     dims = ModelDimensions(**checkpoint["dims"])
-    model = Whisper(dims)
+    model = Whisper(dims, encoder_config=encoder_config)
     model.load_state_dict(checkpoint["model_state_dict"])
 
     if alignment_heads is not None:
