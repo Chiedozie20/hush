@@ -5,3 +5,7 @@
 
 *.obsidian/
 *.egg-info/
+
+**/sim_build
+*.vcd
+*.xml
