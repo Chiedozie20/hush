@@ -85,7 +85,6 @@ def load_fixed_wav(path: Path) -> np.ndarray:
 
         pcm_bytes = wf.readframes(num_frames)
 
-    # Convert int16 PCM to normalized float waveform.
     audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     return audio
 
@@ -98,11 +97,24 @@ def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
     return mel.float()
 
 
-def simple_whisper_inference(path: Path) -> str:
-    # Example scaffold: switch "default" to "myversion" after adding your own Conv1d.
+def get_config():
     encoder_config = {
-        "conv1d": "default",
+    "conv1d": "quantised",
+    "conv1d_config": {
+        "name": "integer",
+        "data_in_width": 12,
+        "data_in_frac_width": 4,
+        "weight_width": 12,
+        "weight_frac_width": 4,
+        "bias_width": 12,
+        "bias_frac_width": 4,
+        },
     }
+    return encoder_config
+
+
+def simple_whisper_inference(path: Path) -> str:
+    encoder_config = get_config()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_obj = torch.device(device)
 
@@ -171,7 +183,8 @@ def main():
 
     if args.test_wer:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model: Whisper = load_model("base.en", device=device)
+        encoder_config = get_config()
+        model: Whisper = load_model("tiny.en", device=device, encoder_config=encoder_config )
         wer = benchmark_WER(model)
         print(f"WER: {wer * 100:.2f} %")
         return

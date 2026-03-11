@@ -11,7 +11,8 @@ from torch import Tensor, nn
 
 from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
-from .transcribe import transcribe as transcribe_function
+from .transcribe import transcribe as transcribe_function 
+from .quantise import Conv1dInteger
 
 try:
     from torch.nn.functional import scaled_dot_product_attention
@@ -182,16 +183,22 @@ class AudioEncoder(nn.Module):
         encoder_config: Optional[Dict[str, str]] = None,
     ):
         super().__init__()
-        self.encoder_config = dict(encoder_config or {})
-        conv1d_impl = self.encoder_config.get("conv1d", "default")
-        if conv1d_impl not in {"default", "quantised"}:
-            raise ValueError(f"Unsupported encoder_config['conv1d']: {conv1d_impl!r}")
-
-        print(f" n_ctx = {n_ctx}    n_state = {n_state}   n_head = {n_head}")
-
-        if conv1d_impl == "quantised":
-            # Placeholder: swap in your handwritten Conv1d implementation here later.
-            self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
+        encoder_config = encoder_config or {}
+        if encoder_config.get("conv1d") == "quantised":
+            quant_config = encoder_config.get("conv1d_config")
+            if quant_config is None:
+                raise ValueError(
+                    "encoder_config['conv1d_config'] is required when conv1d='quantised'"
+                )
+            # Conv1dInteger keeps the standard weight/bias parameter names, so
+            # checkpoint weights still load through model.load_state_dict(...).
+            self.conv1 = Conv1dInteger(
+                n_mels,
+                n_state,
+                kernel_size=3,
+                padding=1,
+                config=quant_config,
+            )
         else:
             self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
