@@ -14,13 +14,13 @@ from .decoding import detect_language as detect_language_function
 from .transcribe import transcribe as transcribe_function 
 from .quantise import Conv1dInteger
 
-try:
-    from hush import Conv1d as HushConv1d
-    HUSH_AVAILABLE = True
-except ImportError:
-    print("Warning: hush.Conv1d not found, falling back to torch.nn.Conv1d. ")
-    HushConv1d = nn.Conv1d
-    HUSH_AVAILABLE = False
+# try:
+#     from hush import Conv1d as HushConv1d
+#     HUSH_AVAILABLE = True
+# except ImportError:
+#     print("Warning: hush.Conv1d not found, falling back to torch.nn.Conv1d. ")
+#     HushConv1d = nn.Conv1d
+#     HUSH_AVAILABLE = False
 
 try:
     from torch.nn.functional import scaled_dot_product_attention
@@ -59,14 +59,20 @@ class Linear(nn.Linear):
         )
 
 
-class Conv1d(HushConv1d):
+# class Conv1d(HushConv1d):
+#     def _conv_forward(
+#         self, x: Tensor, weight: Tensor, bias: Optional[Tensor]
+#     ) -> Tensor:
+#         return super()._conv_forward(
+#             x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype)
+#         )
+class Conv1d(nn.Conv1d):
     def _conv_forward(
         self, x: Tensor, weight: Tensor, bias: Optional[Tensor]
     ) -> Tensor:
         return super()._conv_forward(
             x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype)
         )
-
 
 def sinusoids(length, channels, max_timescale=10000):
     assert channels % 2 == 0
@@ -216,12 +222,15 @@ class AudioEncoder(nn.Module):
         )
         self.ln_post = LayerNorm(n_state)
 
+        self.passthrough = None # TO be Implemeted 
+
     def forward(self, x: Tensor):
         """
         x : torch.Tensor, shape = (batch_size, n_mels, n_ctx)
             the mel spectrogram of the audio
         """
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
+        x = self.passthrough(x) # To be implemented 
         x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
