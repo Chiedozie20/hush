@@ -1,6 +1,12 @@
-# hush
+# Hush
 
-This project aims to port OpenAI's Whisper model onto FPGA hardware
+## Documentation
+
+- [Usage Guide](USAGE.md) - How to use hush.Conv1d
+- [Integration Success](INTEGRATION_SUCCESS.md) - Integration details and test results
+- [Test Report](TEST_REPORT.md) - Comprehensive test results (31/31 passing)
+- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Technical details
+- [Quick Start Guide](QUICK_START.md) - Getting started quickly
 
 Initial research in [docs/research.md](./docs/research.md)
 
@@ -20,7 +26,6 @@ The corect output should show
 - [direnv](https://direnv.net/) (recommended for not wasting time)
 
 ### Getting started
-
 1. Clone [mase](https://github.com/DeepWok/mase) alongside this repo:
    ```
    Top/

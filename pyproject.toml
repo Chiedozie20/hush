@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hush"
+version = "0.1.0"
+description = "FPGA-accelerated Conv1d for Whisper"
+requires-python = ">=3.8"
+dependencies = [
+    "torch>=2.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

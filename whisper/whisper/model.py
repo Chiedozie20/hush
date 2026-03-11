@@ -15,6 +15,14 @@ from .transcribe import transcribe as transcribe_function
 from .quantise import Conv1dInteger
 
 try:
+    from hush import Conv1d as HushConv1d
+    HUSH_AVAILABLE = True
+except ImportError:
+    print("Warning: hush.Conv1d not found, falling back to torch.nn.Conv1d. ")
+    HushConv1d = nn.Conv1d
+    HUSH_AVAILABLE = False
+
+try:
     from torch.nn.functional import scaled_dot_product_attention
 
     SDPA_AVAILABLE = True
@@ -51,7 +59,7 @@ class Linear(nn.Linear):
         )
 
 
-class Conv1d(nn.Conv1d):
+class Conv1d(HushConv1d):
     def _conv_forward(
         self, x: Tensor, weight: Tensor, bias: Optional[Tensor]
     ) -> Tensor:
@@ -61,7 +69,6 @@ class Conv1d(nn.Conv1d):
 
 
 def sinusoids(length, channels, max_timescale=10000):
-    """Returns sinusoids for positional embedding"""
     assert channels % 2 == 0
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
@@ -339,25 +346,11 @@ class Whisper(nn.Module):
         return self.dims.n_vocab - 51765 - int(self.is_multilingual)
 
     def install_kv_cache_hooks(self, cache: Optional[dict] = None):
-        """
-        The `MultiHeadAttention` module optionally accepts `kv_cache` which stores the key and value
-        tensors calculated for the previous positions. This method returns a dictionary that stores
-        all caches, and the necessary hooks for the key and value projection modules that save the
-        intermediate tensors to be reused during later calculations.
-
-        Returns
-        -------
-        cache : Dict[nn.Module, torch.Tensor]
-            A dictionary object mapping the key/value projection modules to its cache
-        hooks : List[RemovableHandle]
-            List of PyTorch RemovableHandle objects to stop the hooks to be called
-        """
         cache = {**cache} if cache is not None else {}
         hooks = []
 
         def save_to_cache(module, _, output):
             if module not in cache or output.shape[1] > self.dims.n_text_ctx:
-                # save as-is, for the first token or cross attention
                 cache[module] = output
             else:
                 cache[module] = torch.cat([cache[module], output], dim=1).detach()
