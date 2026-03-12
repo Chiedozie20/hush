@@ -106,6 +106,7 @@ def load_model(
     download_root: str = None,
     in_memory: bool = False,
     encoder_config: Optional[dict] = None,
+    driver = None
 ) -> Whisper:
     """
     Load a Whisper ASR model
@@ -155,7 +156,7 @@ def load_model(
     del checkpoint_file
 
     dims = ModelDimensions(**checkpoint["dims"])
-    model = Whisper(dims, encoder_config=encoder_config)
+    model = Whisper(dims, encoder_config=encoder_config, driver=driver)
     model.load_state_dict(checkpoint["model_state_dict"])
 
     if alignment_heads is not None:
