@@ -70,22 +70,14 @@ def load_fixed_wav(path: Path) -> np.ndarray:
             raise ValueError("Expected uncompressed PCM WAV")
         if num_frames > N_SAMPLES:
             raise ValueError("Expected audio <= 30 seconds")
-<<<<<<< HEAD
-
         pcm_bytes = wf.readframes(num_frames)
 
-=======
-        pcm_bytes = wf.readframes(num_frames)
->>>>>>> conv1d
     audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     return audio
 
 
 def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
-<<<<<<< HEAD
-    # wav -> log-mel -> fixed 30s frame length.
-=======
->>>>>>> conv1d
+
     audio = load_fixed_wav(path)
     mel = log_mel_spectrogram(audio, n_mels=n_mels)
     mel = pad_or_trim(mel, N_FRAMES).to(device)
@@ -112,13 +104,9 @@ def simple_whisper_inference(path: Path) -> str:
     encoder_config = get_config()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_obj = torch.device(device)
-<<<<<<< HEAD
-
+    
     model: Whisper = load_model("tiny.en", device=device, encoder_config=encoder_config)
 
-=======
-    model: Whisper = load_model("tiny.en", device=device)
->>>>>>> conv1d
     mel = prepare_mel(path, model.dims.n_mels, device_obj)
 
 

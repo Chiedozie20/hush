@@ -230,7 +230,7 @@ class AudioEncoder(nn.Module):
             the mel spectrogram of the audio
         """
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
-        x = self.passthrough(x) # To be implemented 
+        # x = self.passthrough(x) # To be implemented 
         x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
