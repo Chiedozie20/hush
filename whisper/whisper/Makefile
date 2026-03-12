@@ -5,8 +5,8 @@ TOPLEVEL := passthrough
 MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 PACKAGE_ROOT := $(abspath $(MAKEFILE_DIR)/..)
 
-# The cocotb test lives in whisper/model.py and relies on package-relative imports.
-MODULE := whisper.model
+# The cocotb test lives in a dedicated module under the whisper package.
+MODULE := whisper.passthrough_cocotb
 VERILOG_SOURCES := $(MAKEFILE_DIR)/passthrough.sv
 
 export PYTHONPATH := $(PACKAGE_ROOT):$(PYTHONPATH)
