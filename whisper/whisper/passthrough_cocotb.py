@@ -179,12 +179,26 @@ async def test_passthrough_tensor(dut):
         without_timestamps=True,
     )
     with torch.inference_mode():
-        conv1_output = F.gelu(model.encoder.conv1(decode_mel.unsqueeze(0)))
-        passthrough_output = await driver.passthrough_tensor(conv1_output)
-        encoded_audio_features = encode_audio_with_optional_passthrough(
-            model.encoder, decode_mel.unsqueeze(0), passthrough_output
-        )
-        result = model.decode(encoded_audio_features[0], options)
+        conv1_o = model.encoder.conv1(decode_mel.unsqueeze(0))
+        gelu1_o = F.gelu(conv1_o)
+        pass_o = await driver.passthrough_tensor(gelu1_o)
+        conv2_o = model.encoder.conv2(pass_o)
+        gelu2_o = F.gelu(conv2_o)
+
+        permute_o = gelu2_o.permute(0, 2, 1)
+        
+        assert permute_o.shape[1:] == model.encoder.positional_embedding.shape, "incorrect audio shape"
+
+        poss_embed_o = (permute_o + model.encoder.positional_embedding).to(permute_o.dtype)
+
+        x = poss_embed_o
+
+        for block in model.encoder.blocks:
+            x = block(x)
+
+        ln_o = model.encoder.ln_post(x)
+
+        result = model.decode(ln_o[0], options)
     print(result.text)
 
     tensor = build_tensor()

@@ -230,7 +230,10 @@ class AudioEncoder(nn.Module):
             the mel spectrogram of the audio
         """
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
-        x = F.gelu(self.conv1(x))
+        a = self.conv1(x)
+        print(f"weights: {self.conv1.weight.data.shape}")
+        print(f"bias: {self.conv1.bias.data.shape}")
+        x = F.gelu(a)
         print(f"x.shape middle = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}") #x.shape middle = torch.Size([1, 384, 3000]), self.pos_emb.shape = torch.Size([1500, 384])
         x = F.gelu(self.conv2(x))
         print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
