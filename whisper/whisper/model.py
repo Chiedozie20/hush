@@ -229,21 +229,13 @@ class AudioEncoder(nn.Module):
         x : torch.Tensor, shape = (batch_size, n_mels, n_ctx)
             the mel spectrogram of the audio
         """
-        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
-        a = self.conv1(x)
-        print(f"weights: {self.conv1.weight.data.shape}")
-        print(f"bias: {self.conv1.bias.data.shape}")
-        x = F.gelu(a)
-        print(f"x.shape middle = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}") #x.shape middle = torch.Size([1, 384, 3000]), self.pos_emb.shape = torch.Size([1500, 384])
+        x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
-        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
         x = x.permute(0, 2, 1)
-        print(f"x.shape = {x.shape}, self.pos_emb.shape = {self.positional_embedding.shape}")
         assert x.shape[1:] == self.positional_embedding.shape, "incorrect audio shape"
         
         x = (x + self.positional_embedding).to(x.dtype)
      
-        print(f"x after + = {x.shape}")
         for block in self.blocks:
             x = block(x)
 
