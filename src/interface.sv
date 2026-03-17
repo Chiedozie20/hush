@@ -43,7 +43,7 @@ module arbiter #(
   output logic [NumPorts-1:0] blk_req_ready,
   input logic [AddrWidth-1:0] blk_req_addr [NumPorts],
   input logic [BurstWidth-1:0] blk_req_len [NumPorts],
-  output logic [DataWidth-1:0] blk_rd_data [NumPorts],
+  output logic [DataWidth-1:0] blk_rd_data, // All blocks can share the same response
   output logic [NumPorts-1:0] blk_rd_valid,
   input logic [NumPorts-1:0] blk_rd_ready,
   // memory side: single port to ddr controller
