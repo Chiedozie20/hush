@@ -1,3 +1,5 @@
+// ----- THIS IS JUST HERE FOR DEMONSTRATION SAKE -----
+
 // Weight read port, one per block
 // Block drives req, arbiter drives rd
 module block #(

@@ -2,3 +2,6 @@
 *.venv/
 .envrc.local
 **/__pycache__
+**/sim_build
+**/*.fst
+**/*.xml
