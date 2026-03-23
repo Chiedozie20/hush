@@ -1,0 +1,31 @@
+SIM ?= verilator
+
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES ?= $(PWD)/conv1d_parallel.sv
+TOPLEVEL ?= conv1d
+MODULE ?= whisper_integration
+
+COCOTB_TEST_MODULES = $(MODULE)
+
+ifeq ($(SIM),verilator)
+    EXTRA_ARGS += --trace --trace-structs
+    COMPILE_ARGS += -Wno-WIDTH -Wno-UNUSEDSIGNAL
+endif
+
+include $(shell cocotb-config --makefiles)/Makefile.sim
+
+.PHONY: test whisper clean
+
+test: sim
+
+whisper:
+	MODULE=whisper_integration $(MAKE) -f Makefile.cocotb sim
+
+whisper_parallel:
+	VERILOG_SOURCES=$(PWD)/conv1d_parallel.sv TOPLEVEL=conv1d MODULE=whisper_integration $(MAKE) -f Makefile.cocotb sim
+
+clean::
+	rm -rf sim_build
+	rm -rf __pycache__
+	rm -f results.xml
+	rm -f *.vcd

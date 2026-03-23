@@ -97,8 +97,6 @@ module conv1d_tb_verilator;
         $display("[%0t] Starting computation...", $time);
         start = 1;
         @(posedge clk);
-
-        // Load weights - simple identity-like pattern
         $display("[%0t] Loading weights...", $time);
         weight_valid = 1;
         for (int oc = 0; oc < OUT_CHANNELS; oc++) begin
@@ -113,8 +111,6 @@ module conv1d_tb_verilator;
             end
         end
         weight_valid = 0;
-
-        // Load biases - zero
         $display("[%0t] Loading biases...", $time);
         bias_valid = 1;
         for (int oc = 0; oc < OUT_CHANNELS; oc++) begin
@@ -123,8 +119,6 @@ module conv1d_tb_verilator;
             @(posedge clk);
         end
         bias_valid = 0;
-
-        // Load input data
         $display("[%0t] Loading input data...", $time);
         data_in_valid = 1;
         for (int ic = 0; ic < IN_CHANNELS; ic++) begin
@@ -149,11 +143,7 @@ module conv1d_tb_verilator;
         repeat(10) @(posedge clk);
         test_done = 1;
     end
-
-    // Track previous done state manually
     logic prev_done = 0;
-
-    // Monitor outputs
     always @(posedge clk) begin
         if (data_out_valid) begin
             $display("[%0t] Output[%0d][%0d] = %0d (0x%04h) [valid=%b, ready=%b]",
@@ -161,7 +151,6 @@ module conv1d_tb_verilator;
                      $signed(data_out), data_out, data_out_valid, data_out_ready);
         end
 
-        // Debug: show when done signal goes high
         if (done && !prev_done) begin
             $display("[%0t] DONE signal asserted", $time);
         end

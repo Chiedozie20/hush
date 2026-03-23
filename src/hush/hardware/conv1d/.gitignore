@@ -1,0 +1,33 @@
+# CocoTB simulation outputs
+sim_build/
+results.xml
+*.vcd
+dump.vcd
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Python virtual environment
+.venv/
+
+# Temporary test files
+temp_hw_test.py
+hw_conv1_output.pt
+
+# Test outputs
+test_output*.txt
+*.log
+
+# Hardware outputs
+hw_output.pt
+sw_output.pt
+hw_output.txt
+sw_output.txt
+
+# Verilator outputs
+obj_dir/
+
+# Icarus Verilog outputs
+*.vvp
