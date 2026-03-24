@@ -1,7 +1,7 @@
 module conv1d #(
     parameter int DATA_WIDTH      = 16,
-    parameter int MAX_IN_CHANNELS = 384,  // Maximum for conv2
-    parameter int MAX_OUT_CHANNELS = 384, // Maximum for both conv layers
+    parameter int MAX_IN_CHANNELS = 384,  
+    parameter int MAX_OUT_CHANNELS = 384, 
     parameter int KERNEL_SIZE     = 3,
     parameter int MAX_SEQ_LEN     = 3000,
     parameter int NUM_MAC_UNITS   = 384,
@@ -13,7 +13,7 @@ module conv1d #(
     output logic done,
     output logic busy,
 
-    // Runtime configuration
+
     input  logic [15:0] in_channels_cfg,   // Runtime: actual input channels
     input  logic [15:0] out_channels_cfg,  // Runtime: actual output channels
     input  logic [15:0] stride_cfg,        // Runtime: stride (1 or 2)
@@ -34,7 +34,6 @@ module conv1d #(
     input  logic [15:0] in_channel_idx,
     input  logic [15:0] in_pos_idx,
 
-    // Data output interface — full accumulator width to preserve fixed-point precision
     output logic [2*DATA_WIDTH-1:0] data_out,
     output logic data_out_valid,
     input  logic data_out_ready,
@@ -44,18 +43,12 @@ module conv1d #(
     input  logic [15:0] input_length
 );
 
-    // -------------------------------------------------------------------------
-    // Local parameters and runtime values
-    // -------------------------------------------------------------------------
     localparam int MAX_MAC_CYCLES = MAX_IN_CHANNELS * KERNEL_SIZE;
-
-    // Runtime calculated values
-    logic [31:0] mac_cycles;       // = in_channels_cfg * KERNEL_SIZE
+    logic [31:0] mac_cycles;     
     assign mac_cycles = {16'd0, in_channels_cfg} * KERNEL_SIZE;
 
-    // -------------------------------------------------------------------------
-    // FSM states
-    // -------------------------------------------------------------------------
+
+
     typedef enum logic [2:0] {
         IDLE,
         LOAD_WEIGHTS,
@@ -178,7 +171,6 @@ module conv1d #(
                         weights[oc][ic][k] <= '0;
         end else if (state == LOAD_WEIGHTS && weight_valid) begin
             weights[weight_out_ch][weight_in_ch][weight_k_idx] <= weight_in;
-            // Use runtime configuration for completion check
             if (weight_out_ch == out_channels_cfg-1 &&
                 weight_in_ch  == in_channels_cfg-1  &&
                 weight_k_idx  == KERNEL_SIZE-1)
@@ -188,9 +180,6 @@ module conv1d #(
         end
     end
 
-    // =========================================================================
-    // Bias loading
-    // =========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bias_loaded <= 1'b0;

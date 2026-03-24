@@ -125,11 +125,6 @@ async def read_output(dut, out_channels, output_length):
 
             outputs.append((out_ch, out_pos, data_val))
 
-            percent = int(100 * len(outputs) / total)
-            if percent >= last_percent + 10:
-                print(f"  Reading output: {len(outputs)}/{total} ({percent}%)")
-                last_percent = percent
-
     output_tensor = torch.zeros(1, out_channels, output_length, dtype=torch.int64)
     skipped = 0
     for out_ch, out_pos, val in outputs:

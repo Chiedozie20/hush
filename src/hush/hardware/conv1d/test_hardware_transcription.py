@@ -1,15 +1,8 @@
-"""
-Full transcription test using hardware Conv1→GELU→Conv2→GELU
-This test replaces the first two layers of Whisper's AudioEncoder with hardware,
-then runs the full transcription pipeline to verify end-to-end functionality.
-"""
 import sys
 from pathlib import Path
-
 project_root = Path(__file__).parent.parent.parent.parent.parent
 whisper_path = project_root / "whisper"
 sys.path.insert(0, str(whisper_path))
-
 import cocotb
 import torch
 import torch.nn.functional as F
@@ -18,27 +11,19 @@ from cocotb.triggers import RisingEdge, FallingEdge, ReadOnly
 from whisper import load_model
 from whisper.audio import load_audio, pad_or_trim, log_mel_spectrogram
 from whisper.decoding import DecodingOptions, DecodingResult
-
 SCALE_FACTOR = 100.0
 DATA_WIDTH = 16
-
 def quantise_to_int16(tensor, scale=SCALE_FACTOR):
     quantised = (tensor * scale).clamp(-32768, 32767).round().int()
     return quantised
-
 def quantise_bias_to_int16(tensor, scale=SCALE_FACTOR):
     quantised = (tensor * scale * scale).clamp(-2147483648, 2147483647).round().int()
     return quantised
-
 def dequantise_from_int32(tensor, scale=SCALE_FACTOR):
-    """Dequantize from 32-bit fixed point"""
     return tensor.float() / (scale * scale)
 
-
 async def load_weights(dut, weights, in_channels, out_channels, kernel_size):
-    """Load weights into conv1d module"""
     total = out_channels * in_channels * kernel_size
-    count = 0
     for out_ch in range(out_channels):
         for in_ch in range(in_channels):
             for k in range(kernel_size):
@@ -50,10 +35,6 @@ async def load_weights(dut, weights, in_channels, out_channels, kernel_size):
                 dut.weight_in_ch.value = in_ch
                 dut.weight_k_idx.value = k
                 await RisingEdge(dut.clk)
-                count += 1
-                if count % 10000 == 0:
-                    print(f"  Loading weights: {count}/{total} ({100*count/total:.1f}%)")
-
     await FallingEdge(dut.clk)
     dut.weight_valid.value = 0
     await RisingEdge(dut.clk)
@@ -61,7 +42,6 @@ async def load_weights(dut, weights, in_channels, out_channels, kernel_size):
 
 
 async def load_biases(dut, biases, out_channels):
-    """Load biases into conv1d module"""
     for out_ch in range(out_channels):
         await FallingEdge(dut.clk)
         bias_val = int(biases[out_ch].item())
@@ -77,7 +57,6 @@ async def load_biases(dut, biases, out_channels):
 
 
 async def load_input(dut, input_tensor, in_channels):
-    """Load input data into conv1d module"""
     batch, in_ch, seq_len = input_tensor.shape
     assert batch == 1
     assert in_ch == in_channels
@@ -93,10 +72,6 @@ async def load_input(dut, input_tensor, in_channels):
             dut.in_channel_idx.value = ch
             dut.in_pos_idx.value = pos
             await RisingEdge(dut.clk)
-            count += 1
-            if count % 10000 == 0:
-                print(f"  Loading input: {count}/{total} ({100*count/total:.1f}%)")
-
     await FallingEdge(dut.clk)
     dut.data_in_valid.value = 0
     await RisingEdge(dut.clk)
@@ -125,11 +100,6 @@ async def read_output(dut, out_channels, output_length):
                 data_val -= (1 << acc_width)
 
             outputs.append((out_ch, out_pos, data_val))
-
-            percent = int(100 * len(outputs) / total)
-            if percent >= last_percent + 10:
-                print(f"  Reading output: {len(outputs)}/{total} ({percent}%)")
-                last_percent = percent
 
     output_tensor = torch.zeros(1, out_channels, output_length, dtype=torch.int64)
     skipped = 0
@@ -197,9 +167,6 @@ async def apply_gelu_hardware(dut, conv_output_q):
 
 @cocotb.test()
 async def test_hardware_full_transcription(dut):
-    """
-    Full transcription test with hardware Conv1→GELU→Conv2→GELU replacing encoder frontend
-    """
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
     # Reset
@@ -253,8 +220,6 @@ async def test_hardware_full_transcription(dut):
     print("\n" + "="*80)
     print("HARDWARE PIPELINE: Conv1→GELU→Conv2→GELU")
     print("="*80)
-
-    # ========== Run Conv1 in hardware ==========
     print("\n[1/4] Running Conv1 in hardware...")
     conv1_out_ch, conv1_in_ch, kernel_size = conv1_weight.shape
     stride1 = 1
@@ -284,11 +249,9 @@ async def test_hardware_full_transcription(dut):
 
     hw_conv1_out_q = await read_output(dut, conv1_out_ch, output_length)
 
-    # ========== Apply first GELU in hardware ==========
     print("\n[2/4] Applying first GELU in hardware...")
     hw_gelu1_out_q = await apply_gelu_hardware(dut, hw_conv1_out_q)
 
-    # ========== Run Conv2 in hardware ==========
     print("\n[3/4] Running Conv2 in hardware...")
     dut.rst_n.value = 0
     for _ in range(5):
@@ -359,13 +322,6 @@ async def test_hardware_full_transcription(dut):
 
     # Apply layer norm
     encoder_output_hw = model.encoder.ln_post(x)
-    print(f"Encoder output shape: {encoder_output_hw.shape}")
-
-    # ========== Compare with software encoder ==========
-    print("\n" + "="*80)
-    print("COMPARING HARDWARE VS SOFTWARE ENCODER OUTPUTS")
-    print("="*80)
-
     with torch.no_grad():
         encoder_output_sw = model.encoder(mel_input)
 
@@ -376,10 +332,7 @@ async def test_hardware_full_transcription(dut):
     print(f"  Mean diff:   {encoder_diff.mean():.6f}")
     print(f"  Median diff: {encoder_diff.median():.6f}")
 
-    # ========== Run decoder for transcription ==========
-    print("\n" + "="*80)
     print("RUNNING DECODER FOR TRANSCRIPTION")
-    print("="*80)
 
     # Decode with hardware encoder output
     print("\nDecoding with HARDWARE encoder output...")
@@ -389,15 +342,13 @@ async def test_hardware_full_transcription(dut):
     # Create a custom result by running decoder with our hardware encoder output
     from whisper.decoding import decode as whisper_decode
 
-    # Temporarily replace the encoder output
-    original_encode = model.encode
-    def custom_encode(mel):
-        # Return our hardware encoder output
+    original_embed_audio = model.embed_audio
+    def custom_embed_audio(mel):
         return encoder_output_hw
 
-    model.encode = custom_encode
+    model.embed_audio = custom_embed_audio
     result_hw = whisper_decode(model, mel_input, options)
-    model.encode = original_encode  # Restore original
+    model.embed_audio = original_embed_audio
 
     print(f"\nHARDWARE Transcription: {result_hw.text}")
 
@@ -407,14 +358,11 @@ async def test_hardware_full_transcription(dut):
     print(f"\nSOFTWARE Transcription: {result_sw.text}")
 
     # ========== Compare transcriptions ==========
-    print("\n" + "="*80)
     print("TRANSCRIPTION COMPARISON")
-    print("="*80)
 
     print(f"\nHardware: {result_hw.text}")
     print(f"Software: {result_sw.text}")
 
-    # Calculate word-level accuracy
     hw_words = result_hw.text.strip().lower().split()
     sw_words = result_sw.text.strip().lower().split()
 
@@ -425,7 +373,6 @@ async def test_hardware_full_transcription(dut):
     print(f"\nWord accuracy: {word_accuracy*100:.1f}% ({matching_words}/{total_words} words match)")
     print(f"Exact match: {'YES' if result_hw.text == result_sw.text else 'NO'}")
 
-    # ========== Validation ==========
     print("\n" + "="*80)
     print("VALIDATION SUMMARY")
     print("="*80)
@@ -438,15 +385,12 @@ async def test_hardware_full_transcription(dut):
     print(f"  Word accuracy: {word_accuracy*100:.1f}%")
     print(f"  Exact match: {result_hw.text == result_sw.text}")
 
-    # Assert reasonable thresholds
     assert encoder_diff.max() < 5.0, f"Encoder max diff too large: {encoder_diff.max()}"
     assert encoder_diff.mean() < 0.1, f"Encoder mean diff too large: {encoder_diff.mean()}"
     assert word_accuracy >= 0.9, f"Word accuracy too low: {word_accuracy*100:.1f}%"
 
-    print("\n" + "="*80)
-    print("✓ HARDWARE TRANSCRIPTION TEST PASSED!")
-    print("="*80)
-    print(f"✓ Hardware Conv1→GELU→Conv2→GELU frontend works end-to-end")
-    print(f"✓ Full transcription pipeline validated")
-    print(f"✓ Transcription: '{result_hw.text}'")
-    print("="*80)
+    print("HARDWARE TRANSCRIPTION TEST PASSED!")
+    print(f"Hardware Conv1→GELU→Conv2→GELU frontend works end-to-end")
+    print(f"Full transcription pipeline validated")
+    print(f"Transcription: '{result_hw.text}'")
+  
