@@ -43,6 +43,7 @@
 
           buildInputs = [
             pkgs.python311
+            pkgs.basedpyright
             pkgs.git
             pkgs.gcc
             pkgs.gnumake
