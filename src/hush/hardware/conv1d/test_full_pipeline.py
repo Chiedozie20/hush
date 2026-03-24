@@ -30,7 +30,6 @@ def quantise_to_int32(tensor, scale=SCALE_FACTOR):
     return quantised
 
 def dequantise_from_int32(tensor, scale=SCALE_FACTOR):
-    """Dequantize from 32-bit fixed point"""
     return tensor.float() / (scale * scale)
 
 
@@ -50,9 +49,6 @@ async def load_weights(dut, weights, in_channels, out_channels, kernel_size):
                 dut.weight_k_idx.value = k
                 await RisingEdge(dut.clk)
                 count += 1
-                if count % 10000 == 0:
-                    print(f"  Loading weights: {count}/{total} ({100*count/total:.1f}%)")
-
     await FallingEdge(dut.clk)
     dut.weight_valid.value = 0
     await RisingEdge(dut.clk)
@@ -138,11 +134,6 @@ async def read_output(dut, out_channels, output_length):
 
 
 async def apply_gelu_hardware(dut, conv1_output_q):
-    """
-    Apply hardware GELU to conv1 output using the GELU instance in testbench.
-    conv1_output_q: [batch, channels, length] tensor of 32-bit quantized values
-    Returns: [batch, channels, length] tensor of 32-bit quantized values after GELU
-    """
     batch, channels, length = conv1_output_q.shape
     gelu_output_q = torch.zeros_like(conv1_output_q)
 
@@ -198,12 +189,7 @@ async def apply_gelu_hardware(dut, conv1_output_q):
 
 @cocotb.test()
 async def test_full_pipeline_with_hw_gelu(dut):
-    """
-    Test full pipeline: Conv1 (HW) -> GELU (HW) -> Conv2 (HW)
-    """
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-
-    # Reset
     dut.rst_n.value = 0
     dut.start.value = 0
     dut.in_channels_cfg.value = 0
@@ -497,41 +483,21 @@ async def test_full_pipeline_with_hw_gelu(dut):
     print(f"  Final output mean diff:   {pytorch_gelu2_diff.mean():.6f}")
     print(f"  Final output median diff: {pytorch_gelu2_diff.median():.6f}")
 
-    print("\n" + "="*80)
-    print("VALIDATION SUMMARY")
-    print("="*80)
-
-    # Verify accuracy against actual Whisper model
-    # Note: With fixed-point quantization through Conv1→GELU→Conv2→GELU,
-    # we expect some accumulated error. These thresholds are reasonable:
-
     print(f"\nValidating against actual Whisper model outputs:")
     print(f"  Conv1 output:       max_diff={conv1_diff.max():.4f}, mean_diff={conv1_diff.mean():.6f}")
     print(f"  Conv1+GELU output:  max_diff={gelu1_diff.max():.4f}, mean_diff={gelu1_diff.mean():.6f}")
     print(f"  Conv2 output:       max_diff={conv2_diff.max():.4f}, mean_diff={conv2_diff.mean():.6f}")
     print(f"  Conv2+GELU output:  max_diff={gelu2_diff.max():.4f}, mean_diff={gelu2_diff.mean():.6f}")
 
-    # Assert against Whisper model outputs
-    # Note: These thresholds are based on actual hardware performance with fixed-point quantization
     assert conv1_diff.max() < 0.2, f"Conv1 max diff too large: {conv1_diff.max()}"
     assert conv1_diff.mean() < 0.05, f"Conv1 mean diff too large: {conv1_diff.mean()}"
 
-    # GELU LUT has some quantization error at extreme values, but mean is excellent
     assert gelu1_diff.max() < 6.0, f"Conv1+GELU max diff too large: {gelu1_diff.max()}"
     assert gelu1_diff.mean() < 0.02, f"Conv1+GELU mean diff too large: {gelu1_diff.mean()}"
 
-    # Conv2 accumulates some error but still very good
     assert conv2_diff.max() < 10.0, f"Conv2 max diff too large: {conv2_diff.max()}"
     assert conv2_diff.mean() < 0.05, f"Conv2 mean diff too large: {conv2_diff.mean()}"
 
-    # Final output after second GELU - errors average out nicely
     assert gelu2_diff.max() < 2.0, f"Conv2+GELU max diff too large: {gelu2_diff.max()}"
     assert gelu2_diff.mean() < 0.03, f"Conv2+GELU mean diff too large: {gelu2_diff.mean()}"
 
-    print("\n" + "="*80)
-    print("✓ FULL PIPELINE TEST PASSED!")
-    print("="*80)
-    print(f"✓ Hardware matches actual Whisper model outputs")
-    print(f"✓ Conv1→GELU→Conv2→GELU pipeline validated against real model")
-    print(f"✓ All accuracy thresholds met")
-    print("="*80)
