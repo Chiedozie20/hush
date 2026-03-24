@@ -1,12 +1,11 @@
 module conv1d #(
-    parameter int DATA_WIDTH    = 16,
-    parameter int IN_CHANNELS   = 80,
-    parameter int OUT_CHANNELS  = 384,
-    parameter int KERNEL_SIZE   = 3,
-    parameter int STRIDE        = 1,
-    parameter int MAX_SEQ_LEN   = 3000,
-    parameter int NUM_MAC_UNITS = 384,
-    parameter int PAD           = (KERNEL_SIZE - 1) / 2 
+    parameter int DATA_WIDTH      = 16,
+    parameter int MAX_IN_CHANNELS = 384,  // Maximum for conv2
+    parameter int MAX_OUT_CHANNELS = 384, // Maximum for both conv layers
+    parameter int KERNEL_SIZE     = 3,
+    parameter int MAX_SEQ_LEN     = 3000,
+    parameter int NUM_MAC_UNITS   = 384,
+    parameter int PAD             = (KERNEL_SIZE - 1) / 2
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -14,8 +13,13 @@ module conv1d #(
     output logic done,
     output logic busy,
 
+    // Runtime configuration
+    input  logic [15:0] in_channels_cfg,   // Runtime: actual input channels
+    input  logic [15:0] out_channels_cfg,  // Runtime: actual output channels
+    input  logic [15:0] stride_cfg,        // Runtime: stride (1 or 2)
+
     input  logic [DATA_WIDTH-1:0] weight_in,
-    input  logic [2*DATA_WIDTH-1:0] bias_in, 
+    input  logic [2*DATA_WIDTH-1:0] bias_in,
     input  logic weight_valid,
     input  logic bias_valid,
     input  logic [15:0] weight_out_ch,
@@ -41,9 +45,13 @@ module conv1d #(
 );
 
     // -------------------------------------------------------------------------
-    // Local parameters
+    // Local parameters and runtime values
     // -------------------------------------------------------------------------
-    localparam int MAC_CYCLES = IN_CHANNELS * KERNEL_SIZE;
+    localparam int MAX_MAC_CYCLES = MAX_IN_CHANNELS * KERNEL_SIZE;
+
+    // Runtime calculated values
+    logic [31:0] mac_cycles;       // = in_channels_cfg * KERNEL_SIZE
+    assign mac_cycles = {16'd0, in_channels_cfg} * KERNEL_SIZE;
 
     // -------------------------------------------------------------------------
     // FSM states
@@ -61,10 +69,11 @@ module conv1d #(
 
     // -------------------------------------------------------------------------
     // Storage (kept as regs per user request — will migrate to DDR later)
+    // Use MAX sizes for arrays, runtime config determines how much is used
     // -------------------------------------------------------------------------
-    logic [DATA_WIDTH-1:0] weights    [OUT_CHANNELS-1:0][IN_CHANNELS-1:0][KERNEL_SIZE-1:0];
-    logic [2*DATA_WIDTH-1:0] biases   [OUT_CHANNELS-1:0];  // 32-bit to match accumulator domain
-    logic [DATA_WIDTH-1:0] input_data [IN_CHANNELS-1:0][MAX_SEQ_LEN-1:0];
+    logic [DATA_WIDTH-1:0] weights    [MAX_OUT_CHANNELS-1:0][MAX_IN_CHANNELS-1:0][KERNEL_SIZE-1:0];
+    logic [2*DATA_WIDTH-1:0] biases   [MAX_OUT_CHANNELS-1:0];  // 32-bit to match accumulator domain
+    logic [DATA_WIDTH-1:0] input_data [MAX_IN_CHANNELS-1:0][MAX_SEQ_LEN-1:0];
 
     // -------------------------------------------------------------------------
     // Control signals
@@ -77,7 +86,8 @@ module conv1d #(
     logic [15:0] output_ch_counter;
 
     logic [15:0] output_length;
-    assign output_length = (input_length + 2 * PAD - KERNEL_SIZE) / STRIDE + 1;
+    // Use runtime stride_cfg for output length calculation
+    assign output_length = (input_length + 2 * PAD - KERNEL_SIZE) / stride_cfg + 1;
 
     // -------------------------------------------------------------------------
     // MAC engine signals
@@ -90,11 +100,12 @@ module conv1d #(
     logic        mac_done;           // pulses high for one cycle when MAC finishes
 
     // Pre-computed input position per MAC unit (moved outside always_ff for portability)
+    // Use runtime stride_cfg instead of compile-time STRIDE
     logic signed [16:0] input_pos [NUM_MAC_UNITS-1:0];
     genvar gi;
     generate
         for (gi = 0; gi < NUM_MAC_UNITS; gi++) begin : gen_input_pos
-            assign input_pos[gi] = $signed({1'b0, out_pos}) * STRIDE
+            assign input_pos[gi] = $signed({1'b0, out_pos}) * $signed({1'b0, stride_cfg})
                                  + $signed({1'b0, mac_k_idx[gi]})
                                  - $signed(PAD[16:0]);
         end
@@ -132,8 +143,9 @@ module conv1d #(
 
             OUTPUT: begin
                 // All channels for current position drained
+                // Use runtime out_channels_cfg instead of compile-time OUT_CHANNELS
                 if (data_out_valid && data_out_ready &&
-                    output_ch_counter == OUT_CHANNELS - 1) begin
+                    output_ch_counter == out_channels_cfg - 1) begin
                     if (out_pos + 1 >= output_length)
                         next_state = DONE_STATE;
                     else
@@ -160,14 +172,15 @@ module conv1d #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             weights_loaded <= 1'b0;
-            for (int oc = 0; oc < OUT_CHANNELS; oc++)
-                for (int ic = 0; ic < IN_CHANNELS; ic++)
+            for (int oc = 0; oc < MAX_OUT_CHANNELS; oc++)
+                for (int ic = 0; ic < MAX_IN_CHANNELS; ic++)
                     for (int k = 0; k < KERNEL_SIZE; k++)
                         weights[oc][ic][k] <= '0;
         end else if (state == LOAD_WEIGHTS && weight_valid) begin
             weights[weight_out_ch][weight_in_ch][weight_k_idx] <= weight_in;
-            if (weight_out_ch == OUT_CHANNELS-1 &&
-                weight_in_ch  == IN_CHANNELS-1  &&
+            // Use runtime configuration for completion check
+            if (weight_out_ch == out_channels_cfg-1 &&
+                weight_in_ch  == in_channels_cfg-1  &&
                 weight_k_idx  == KERNEL_SIZE-1)
                 weights_loaded <= 1'b1;
         end else if (state == IDLE) begin
@@ -181,11 +194,12 @@ module conv1d #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bias_loaded <= 1'b0;
-            for (int oc = 0; oc < OUT_CHANNELS; oc++)
+            for (int oc = 0; oc < MAX_OUT_CHANNELS; oc++)
                 biases[oc] <= '0;
         end else if (state == LOAD_BIAS && bias_valid) begin
             biases[bias_out_ch] <= bias_in;
-            if (bias_out_ch == OUT_CHANNELS-1)
+            // Use runtime configuration for completion check
+            if (bias_out_ch == out_channels_cfg-1)
                 bias_loaded <= 1'b1;
         end else if (state == IDLE) begin
             bias_loaded <= 1'b0;
@@ -197,7 +211,7 @@ module conv1d #(
     // =========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int ic = 0; ic < IN_CHANNELS; ic++)
+            for (int ic = 0; ic < MAX_IN_CHANNELS; ic++)
                 for (int pos = 0; pos < MAX_SEQ_LEN; pos++)
                     input_data[ic][pos] <= '0;
             input_loaded <= 1'b0;
@@ -209,20 +223,13 @@ module conv1d #(
             input_data[in_channel_idx][in_pos_idx] <= data_in;
             if (!input_loaded) begin
                 input_count <= input_count + 32'd1;
-                if (input_count + 32'd1 >= 32'(IN_CHANNELS) * 32'(input_length))
+                // Use runtime in_channels_cfg
+                if (input_count + 32'd1 >= 32'(in_channels_cfg) * 32'(input_length))
                     input_loaded <= 1'b1;
             end
         end
     end
 
-    // =========================================================================
-    // MAC engine (COMPUTE state only)
-    //
-    // FIX: The original read accumulators on the same cycle as the final
-    //      multiply-accumulate, returning a stale value. Now we let the MAC
-    //      run to completion (mac_done pulses one cycle AFTER the last product
-    //      is accumulated) and drain in a separate OUTPUT state.
-    // =========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (int i = 0; i < NUM_MAC_UNITS; i++) begin
@@ -237,9 +244,9 @@ module conv1d #(
             mac_done <= 1'b0;  // default: clear pulse
 
             if (mac_computing) begin
-                // --- MAC step ---
                 for (int i = 0; i < NUM_MAC_UNITS; i++) begin
-                    if (i < OUT_CHANNELS) begin
+                    // Use runtime out_channels_cfg instead of OUT_CHANNELS
+                    if (i < out_channels_cfg) begin
                         // Generalized padding: only accumulate when input_pos
                         // is within [0, input_length-1]
                         if (input_pos[i] >= 0 &&
@@ -249,35 +256,26 @@ module conv1d #(
                                 * $signed(weights[i][mac_in_ch[i]][mac_k_idx[i]]);
                         end
 
-                        // Advance (k, ic) counters
+                        // Advance (k, ic) counters - use runtime in_channels_cfg
                         if (mac_k_idx[i] < KERNEL_SIZE - 1) begin
                             mac_k_idx[i] <= mac_k_idx[i] + 16'd1;
                         end else begin
                             mac_k_idx[i] <= 16'd0;
-                            if (mac_in_ch[i] < IN_CHANNELS - 1)
+                            if (mac_in_ch[i] < in_channels_cfg - 1)
                                 mac_in_ch[i] <= mac_in_ch[i] + 16'd1;
                         end
                     end
                 end
 
                 mac_cycle_counter <= mac_cycle_counter + 16'd1;
-
-                // Last MAC cycle: the product above is being written NOW.
-                // Signal mac_done so the FSM transitions to OUTPUT next cycle.
-                // The accumulators will be stable when OUTPUT reads them.
-                if (mac_cycle_counter == MAC_CYCLES - 1) begin
+                if (mac_cycle_counter == mac_cycles[15:0] - 1) begin
                     mac_computing <= 1'b0;
                     mac_done      <= 1'b1;
                 end
 
             end else if (!mac_done) begin
-                // --- Initialise accumulators with bias ---
-                // Guard: only re-init when we are genuinely starting a new
-                // position, NOT on the cycle after mac_done when accumulators
-                // hold completed results waiting for the OUTPUT state.
-                // Bias is already 32-bit (quantized by scale^2), so no sign extension needed.
                 for (int i = 0; i < NUM_MAC_UNITS; i++) begin
-                    if (i < OUT_CHANNELS)
+                    if (i < out_channels_cfg)
                         mac_accumulators[i] <= $signed(biases[i]);
                     else
                         mac_accumulators[i] <= '0;
@@ -320,7 +318,8 @@ module conv1d #(
                 out_pos_idx     <= out_pos;
                 data_out_valid  <= 1'b1;
             end else if (data_out_ready) begin
-                if (output_ch_counter < OUT_CHANNELS - 1) begin
+                // Use runtime out_channels_cfg instead of OUT_CHANNELS
+                if (output_ch_counter < out_channels_cfg - 1) begin
                     // Next channel, same position
                     output_ch_counter <= output_ch_counter + 16'd1;
                     data_out          <= mac_accumulators[output_ch_counter + 1];

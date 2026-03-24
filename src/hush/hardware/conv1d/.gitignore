@@ -1,33 +1,25 @@
-# CocoTB simulation outputs
+# Build artifacts
 sim_build/
-results.xml
-*.vcd
-dump.vcd
-
-# Python cache
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# Simulation outputs
+*.vcd
+*.vvp
+dump.vcd
+results.xml
 
 # Python virtual environment
 .venv/
+venv/
 
-# Temporary test files
-temp_hw_test.py
-hw_conv1_output.pt
-
-# Test outputs
-test_output*.txt
+# CocoTB logs
 *.log
 
-# Hardware outputs
-hw_output.pt
-sw_output.pt
-hw_output.txt
-sw_output.txt
-
-# Verilator outputs
-obj_dir/
-
-# Icarus Verilog outputs
-*.vvp
+# Editor files
+*.swp
+*.swo
+*~
+.DS_Store

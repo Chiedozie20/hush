@@ -14,7 +14,7 @@ endif
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
-.PHONY: test whisper clean
+.PHONY: test whisper whisper_parallel test_gelu_conv2 test_gelu_simple test_gelu_lut test_full_pipeline test_transcription clean
 
 test: sim
 
@@ -23,6 +23,21 @@ whisper:
 
 whisper_parallel:
 	VERILOG_SOURCES=$(PWD)/conv1d_parallel.sv TOPLEVEL=conv1d MODULE=whisper_integration $(MAKE) -f Makefile.cocotb sim
+
+test_gelu_conv2:
+	VERILOG_SOURCES=$(PWD)/conv1d_parallel.sv TOPLEVEL=conv1d MODULE=test_gelu_conv2 $(MAKE) -f Makefile.cocotb sim
+
+test_gelu_simple:
+	VERILOG_SOURCES=$(PWD)/gelu_simple.sv TOPLEVEL=gelu_simple MODULE=test_gelu_simple $(MAKE) -f Makefile.cocotb sim
+
+test_gelu_lut:
+	VERILOG_SOURCES="$(PWD)/gelu_lut_wrapper.sv $(PWD)/gelu_lut.sv" TOPLEVEL=gelu_lut_wrapper MODULE=test_gelu_lut $(MAKE) -f Makefile.cocotb sim
+
+test_full_pipeline:
+	VERILOG_SOURCES="$(PWD)/conv_gelu_testbench.sv $(PWD)/conv1d_parallel.sv $(PWD)/gelu_lut_wrapper.sv $(PWD)/gelu_lut.sv" TOPLEVEL=conv_gelu_testbench MODULE=test_full_pipeline $(MAKE) -f Makefile.cocotb sim
+
+test_transcription:
+	VERILOG_SOURCES="$(PWD)/conv_gelu_testbench.sv $(PWD)/conv1d_parallel.sv $(PWD)/gelu_lut_wrapper.sv $(PWD)/gelu_lut.sv" TOPLEVEL=conv_gelu_testbench MODULE=test_hardware_transcription $(MAKE) -f Makefile.cocotb sim
 
 clean::
 	rm -rf sim_build
