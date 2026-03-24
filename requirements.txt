@@ -5,3 +5,4 @@ cocotb==2.0.0
 jiwer==4.0.0
 more-itertools==10.8.0
 pandas==3.0.1
+soundfile==0.13.1

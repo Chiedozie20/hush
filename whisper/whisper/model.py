@@ -11,8 +11,8 @@ from torch import Tensor, nn
 
 from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
-from .transcribe import transcribe as transcribe_function 
-from .quantise import Conv1dInteger
+from .quantise import Conv1dInteger, LinearInteger
+from .transcribe import transcribe as transcribe_function
 
 # try:
 #     from hush import Conv1d as HushConv1d
@@ -74,6 +74,7 @@ class Conv1d(nn.Conv1d):
             x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype)
         )
 
+
 def sinusoids(length, channels, max_timescale=10000):
     assert channels % 2 == 0
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
@@ -95,13 +96,31 @@ def disable_sdpa():
 class MultiHeadAttention(nn.Module):
     use_sdpa = True
 
-    def __init__(self, n_state: int, n_head: int):
+    def __init__(
+        self,
+        n_state: int,
+        n_head: int,
+        encoder_config: Optional[Dict[str, str]] = None,
+    ):
         super().__init__()
         self.n_head = n_head
-        self.query = Linear(n_state, n_state)
-        self.key = Linear(n_state, n_state, bias=False)
-        self.value = Linear(n_state, n_state)
-        self.out = Linear(n_state, n_state)
+
+        encoder_config = encoder_config or {}
+        if encoder_config.get("attention") == "quantised":
+            quant_config = encoder_config.get("attention_config")
+            if quant_config is None:
+                raise ValueError(
+                    "encoder_config['attention_config'] is required when attention='quantised'"
+                )
+            self.query = LinearInteger(n_state, n_state, bias=True, config=quant_config)
+            self.key = LinearInteger(n_state, n_state, bias=False, config=quant_config)
+            self.value = LinearInteger(n_state, n_state, bias=True, config=quant_config)
+            self.out = LinearInteger(n_state, n_state, bias=True, config=quant_config)
+        else:
+            self.query = Linear(n_state, n_state)
+            self.key = Linear(n_state, n_state, bias=False)
+            self.value = Linear(n_state, n_state)
+            self.out = Linear(n_state, n_state)
 
     def forward(
         self,
@@ -154,14 +173,22 @@ class MultiHeadAttention(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    def __init__(self, n_state: int, n_head: int, cross_attention: bool = False):
+    def __init__(
+        self,
+        n_state: int,
+        n_head: int,
+        cross_attention: bool = False,
+        encoder_config: Optional[Dict[str, str]] = None,
+    ):
         super().__init__()
 
-        self.attn = MultiHeadAttention(n_state, n_head)
+        self.attn = MultiHeadAttention(n_state, n_head, encoder_config)
         self.attn_ln = LayerNorm(n_state)
 
         self.cross_attn = (
-            MultiHeadAttention(n_state, n_head) if cross_attention else None
+            MultiHeadAttention(n_state, n_head, encoder_config)
+            if cross_attention
+            else None
         )
         self.cross_attn_ln = LayerNorm(n_state) if cross_attention else None
 
@@ -179,7 +206,7 @@ class ResidualAttentionBlock(nn.Module):
         kv_cache: Optional[dict] = None,
     ):
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
-        if self.cross_attn: # no cross attention for encoder block
+        if self.cross_attn:  # no cross attention for encoder block
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
         x = x + self.mlp(self.mlp_ln(x))
         return x
@@ -194,7 +221,7 @@ class AudioEncoder(nn.Module):
         n_head: int,
         n_layer: int,
         encoder_config: Optional[Dict[str, str]] = None,
-        driver = None
+        driver=None,
     ):
         super().__init__()
         encoder_config = encoder_config or {}
@@ -218,8 +245,11 @@ class AudioEncoder(nn.Module):
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
         self.register_buffer("positional_embedding", sinusoids(n_ctx, n_state))
 
-        self.blocks: Iterable[ResidualAttentionBlock] = nn.ModuleList(
-            [ResidualAttentionBlock(n_state, n_head) for _ in range(n_layer)]
+        self.blocks = nn.ModuleList(
+            [
+                ResidualAttentionBlock(n_state, n_head, encoder_config=encoder_config)
+                for _ in range(n_layer)
+            ]
         )
         self.ln_post = LayerNorm(n_state)
         self.passthrough = driver.passthrough_tensor if driver is not None else None
@@ -233,9 +263,9 @@ class AudioEncoder(nn.Module):
         x = F.gelu(self.conv2(x))
         x = x.permute(0, 2, 1)
         assert x.shape[1:] == self.positional_embedding.shape, "incorrect audio shape"
-        
+
         x = (x + self.positional_embedding).to(x.dtype)
-     
+
         for block in self.blocks:
             x = block(x)
 
@@ -290,7 +320,10 @@ class TextDecoder(nn.Module):
 
 class Whisper(nn.Module):
     def __init__(
-        self, dims: ModelDimensions, encoder_config: Optional[Dict[str, str]] = None, driver=None
+        self,
+        dims: ModelDimensions,
+        encoder_config: Optional[Dict[str, str]] = None,
+        driver=None,
     ):
         super().__init__()
         self.dims = dims

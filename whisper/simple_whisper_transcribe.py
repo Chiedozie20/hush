@@ -1,35 +1,50 @@
 import argparse
+import os
 import wave
 from pathlib import Path
 
+import jiwer
 import numpy as np
+import pandas as pd
+import soundfile as sf
 import torch
-
-from whisper import load_model
-from whisper.audio import N_FRAMES, N_SAMPLES, SAMPLE_RATE, log_mel_spectrogram, pad_or_trim
+import torchaudio
+from tqdm import tqdm
+from whisper.audio import (
+    N_FRAMES,
+    N_SAMPLES,
+    SAMPLE_RATE,
+    log_mel_spectrogram,
+    pad_or_trim,
+)
 from whisper.decoding import DecodingOptions
 from whisper.model import Whisper
-
-import os
-import numpy as np
-import torch
-import pandas as pd
-import whisper
-import torchaudio
-
-from tqdm.notebook import tqdm
-
-
-import jiwer
 from whisper.normalizers import EnglishTextNormalizer
 
+import whisper
+from whisper import load_model
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# This monkeypatch is to make the torchaudio load work on NixOS
+_original_load = torchaudio.load
+
+
+def _patched_load(filepath, *args, **kwargs):
+    data, samplerate = sf.read(filepath, dtype="float32")
+    waveform = torch.from_numpy(data).unsqueeze(0)  # (1, samples)
+    return waveform, samplerate
+
+
+torchaudio.load = _patched_load
+
+
 class LibriSpeech(torch.utils.data.Dataset):
     """
     A simple class to wrap LibriSpeech and trim/pad the audio to 30 seconds.
     It will drop the last few seconds of a very small portion of the utterances.
     """
+
     def __init__(self, split="test-clean", device=DEVICE):
         self.dataset = torchaudio.datasets.LIBRISPEECH(
             root=os.path.expanduser("~/.cache"),
@@ -46,8 +61,9 @@ class LibriSpeech(torch.utils.data.Dataset):
         assert sample_rate == 16000
         audio = whisper.pad_or_trim(audio.flatten()).to(self.device)
         mel = whisper.log_mel_spectrogram(audio)
-        
+
         return (mel, text)
+
 
 def load_fixed_wav(path: Path) -> np.ndarray:
     with wave.open(str(path), "rb") as wf:
@@ -86,15 +102,25 @@ def prepare_mel(path: Path, n_mels: int, device: torch.device) -> torch.Tensor:
 
 def get_config():
     encoder_config = {
-    "conv1d": "quantised",
-    "conv1d_config": {
-        "name": "integer",
-        "data_in_width": 12,
-        "data_in_frac_width": 4,
-        "weight_width": 12,
-        "weight_frac_width": 4,
-        "bias_width": 12,
-        "bias_frac_width": 4,
+        "conv1d": "quantised",
+        "conv1d_config": {
+            "name": "integer",
+            "data_in_width": 12,
+            "data_in_frac_width": 4,
+            "weight_width": 12,
+            "weight_frac_width": 4,
+            "bias_width": 12,
+            "bias_frac_width": 4,
+        },
+        "attention": "quantised",
+        "attention_config": {
+            "name": "integer",
+            "data_in_width": 16,
+            "data_in_frac_width": 8,
+            "weight_width": 16,
+            "weight_frac_width": 8,
+            "bias_width": 16,
+            "bias_frac_width": 8,
         },
     }
     return encoder_config
@@ -104,11 +130,10 @@ def simple_whisper_inference(path: Path) -> str:
     encoder_config = get_config()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_obj = torch.device(device)
-    
+
     model: Whisper = load_model("tiny.en", device=device, encoder_config=encoder_config)
 
     mel = prepare_mel(path, model.dims.n_mels, device_obj)
-
 
     fp16 = model.device.type == "cuda"
     decode_mel = mel.half() if fp16 else mel.float()
@@ -128,11 +153,11 @@ def simple_whisper_inference(path: Path) -> str:
 
 def benchmark_WER(model):
     dataset = LibriSpeech("test-clean")
-    dataset = torch.utils.data.Subset(dataset, range(10))
+    dataset = torch.utils.data.Subset(dataset, range(100))
     loader = torch.utils.data.DataLoader(dataset, batch_size=16)
     print(
-    f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
-    f"and has {sum(np.prod(p.shape) for p in model.parameters()):,} parameters."
+        f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
+        f"and has {sum(np.prod(p.shape) for p in model.parameters()):,} parameters."
     )
     options = whisper.DecodingOptions(language="en", without_timestamps=True)
 
@@ -150,6 +175,7 @@ def benchmark_WER(model):
     data["reference_clean"] = [normalizer(text) for text in data["reference"]]
     wer = jiwer.wer(list(data["reference_clean"]), list(data["hypothesis_clean"]))
     return wer
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -171,7 +197,9 @@ def main():
     if args.test_wer:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         encoder_config = get_config()
-        model: Whisper = load_model("tiny.en", device=device, encoder_config=encoder_config )
+        model: Whisper = load_model(
+            "tiny.en", device=device, encoder_config=encoder_config
+        )
         wer = benchmark_WER(model)
         print(f"WER: {wer * 100:.2f} %")
         return
