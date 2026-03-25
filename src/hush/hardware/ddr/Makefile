@@ -4,7 +4,7 @@ MODULE = test_ddr_controller
 SIM = verilator
 TOPLEVEL_LANG = verilog
 
-VERILOG_SOURCES = ../../rtl/ddr_controller.sv
+VERILOG_SOURCES = ddr_controller.sv
 
 # Waveforms on by default, disabled with WAVES=0
 WAVES ?= 1

@@ -8,4 +8,5 @@
 
 **/sim_build
 *.vcd
+*.fst
 *.xml
