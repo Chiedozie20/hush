@@ -6,7 +6,6 @@ from pathlib import Path
 import jiwer
 import numpy as np
 import pandas as pd
-import soundfile as sf
 import torch
 import torchaudio
 from tqdm import tqdm
@@ -25,18 +24,19 @@ import whisper
 from whisper import load_model
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+try:
+    import soundfile as sf
 
-# This monkeypatch is to make the torchaudio load work on NixOS
-_original_load = torchaudio.load
+    def _patched_load(filepath, *args, **kwargs):
+        data, samplerate = sf.read(filepath, dtype="float32")
+        waveform = torch.from_numpy(data).unsqueeze(0)
+        return waveform, samplerate
 
+    torchaudio.load = _patched_load
 
-def _patched_load(filepath, *args, **kwargs):
-    data, samplerate = sf.read(filepath, dtype="float32")
-    waveform = torch.from_numpy(data).unsqueeze(0)  # (1, samples)
-    return waveform, samplerate
+except ImportError:
+    pass
 
-
-torchaudio.load = _patched_load
 
 
 class LibriSpeech(torch.utils.data.Dataset):
@@ -153,7 +153,7 @@ def simple_whisper_inference(path: Path) -> str:
 
 def benchmark_WER(model):
     dataset = LibriSpeech("test-clean")
-    dataset = torch.utils.data.Subset(dataset, range(100))
+    dataset = torch.utils.data.Subset(dataset, range(10,20))
     loader = torch.utils.data.DataLoader(dataset, batch_size=16)
     print(
         f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
