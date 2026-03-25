@@ -34,8 +34,21 @@ sin lut: 2^width \* width
 e.g 16 
 
 
+icarus
+real    0m42.955s
+user    0m42.491s
+sys     0m1.016s
+real    2m33.569s
+user    2m43.290s
+sys     0m1.282s
 
+verilator 
+real    0m55.479s
+user    0m55.076s
+sys     0m1.373s
+real    2m28.426s
+user    2m39.119s
+sys     0m1.016s
 
-
-
-
+bug :
+switch to cosine in 193 instead of 192 due to latency 

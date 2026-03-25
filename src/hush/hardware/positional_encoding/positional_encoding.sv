@@ -5,10 +5,10 @@ module positional_encoding #(
 ) (
     input  logic                     i_clk,
     input  logic                     i_rst,
-    input  logic [WIDTH-1:0]         i_x [0:N_STATE-1],
+    input  logic [0:N_STATE-1][WIDTH-1:0] i_x,
     input  logic [WPOS-1:0]          i_position,
     input  logic                     i_valid,
-    output logic [WIDTH-1:0]         o_x [0:N_STATE-1],
+    output logic [0:N_STATE-1][WIDTH-1:0] o_x,
     output logic                     o_valid
 );
 
@@ -18,7 +18,7 @@ module positional_encoding #(
     localparam int PHASE_WIDTH = WIDTH + WPOS + 1;
     localparam int SIN_ROM_LATENCY = 2;
 
-    logic [WIDTH-1:0] x_latched [0:N_STATE-1];
+    logic [0:N_STATE-1][WIDTH-1:0] x_latched;
     logic [WPOS-1:0]  position_latched;
 
     logic                    busy;
@@ -38,9 +38,9 @@ module positional_encoding #(
     logic [STATE_W-1:0]            state_idx_q;
     logic [WIDTH-1:0]              x_value_q;
 
-    logic [STATE_W-1:0]            state_pipe [0:SIN_ROM_LATENCY-1];
-    logic [WIDTH-1:0]              x_pipe [0:SIN_ROM_LATENCY-1];
-    logic                          valid_pipe [0:SIN_ROM_LATENCY-1];
+    logic [0:SIN_ROM_LATENCY-1][STATE_W-1:0] state_pipe;
+    logic [0:SIN_ROM_LATENCY-1][WIDTH-1:0]   x_pipe;
+    logic [0:SIN_ROM_LATENCY-1]              valid_pipe;
 
     logic                          cos_q;
     logic signed [WIDTH-1:0]       sin_value;
@@ -61,7 +61,7 @@ module positional_encoding #(
     frequency_index_rom #(
         .DEPTH(HALF_STATE),
         .WIDTH(WIDTH),
-        .INIT_FILE("freq_lut.mem")
+        .INIT_FILE("./freq_lut.mem")
     ) fi_lut (
         .i_clk(i_clk),
         .i_index(freq_index_in),
@@ -74,7 +74,7 @@ module positional_encoding #(
         .INT_BITS(4),
         .FRAC_BITS(12),
         .LUT_DEPTH(1024),
-        .INIT_FILE("sin_lut.mem")
+        .INIT_FILE("./sin_lut.mem")
     ) u_sinusoid_rom (
         .i_clk(i_clk),
         .i_phase(phase_q),
@@ -129,7 +129,7 @@ module positional_encoding #(
                 issue_valid_d <= 1'b1;
                 state_idx_d <= issue_ctr;
                 x_value_d <= x_latched[issue_ctr];
-                cos_d <= (issue_ctr >= HALF_STATE);
+                cos_d <= (issue_ctr >= (HALF_STATE - 1));
 
                 if (issue_ctr == N_STATE - 1) begin
                     issue_done <= 1'b1;

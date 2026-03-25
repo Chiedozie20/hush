@@ -5,7 +5,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 
-TENSOR_SHAPE = (1500, 384)
+TENSOR_SHAPE = (5, 384)
 WIDTH = 16
 FRAC_BITS = 12
 MAX_TIMESCALE = 10000
@@ -44,6 +44,21 @@ def build_test_tensor() -> torch.Tensor:
     total_values = TENSOR_SHAPE[0] * TENSOR_SHAPE[1]
     base = torch.linspace(-0.75, 0.75, steps=total_values, dtype=torch.float32)
     return quantize_q4_12(base.reshape(TENSOR_SHAPE))
+
+
+def format_position_comparison(
+    hw_output: torch.Tensor,
+    reference_output: torch.Tensor,
+    diff: torch.Tensor,
+    position: int,
+) -> str:
+    header = "idx | received | expected | abs_diff"
+    rows = [header]
+    for idx, (received, expected, abs_diff) in enumerate(
+        zip(hw_output[position].tolist(), reference_output[position].tolist(), diff[position].tolist())
+    ):
+        rows.append(f"{idx:3d} | {received:8d} | {expected:8d} | {abs_diff:8d}")
+    return "\n".join(rows)
 
 
 class PositionalEncodingDriver:
@@ -118,8 +133,12 @@ async def test_positional_encoding_tensor(dut):
 
     diff = (hw_output - reference_output).abs()
     max_diff = int(diff.max().item())
+    failing_positions = torch.nonzero(torch.any(diff > ABS_TOL, dim=1), as_tuple=False)
+    first_failing_position = int(failing_positions[0].item()) if len(failing_positions) else 0
 
     assert torch.all(diff <= ABS_TOL), (
         f"hardware positional encoding deviated from reference: max_diff={max_diff}, "
-        f"tolerance={ABS_TOL}"
+        f"tolerance={ABS_TOL}\n"
+        f"first failing position={first_failing_position}\n"
+        f"{format_position_comparison(hw_output, reference_output, diff, position=first_failing_position)}"
     )

@@ -4,7 +4,7 @@ module sinusoid_rom #(
     parameter int INT_BITS = 4,
     parameter int FRAC_BITS = 12,
     parameter int LUT_DEPTH = 1024,
-    parameter string INIT_FILE = "sin_lut.mem"
+    parameter string INIT_FILE = "./sin_lut.mem"
 )(
     input  logic                           i_clk,
     input  logic signed [PHASE_WIDTH-1:0]  i_phase,
@@ -18,7 +18,6 @@ module sinusoid_rom #(
     localparam logic signed [WIDTH-1:0] HALF_PI_Q = 16'sd6434;
 
     logic signed [WIDTH-1:0] rom [0:LUT_DEPTH-1];
-
     logic [ADDR_W-1:0]       addr_q;
     logic                    negate_q;
     logic signed [WIDTH-1:0] rom_data_q;
