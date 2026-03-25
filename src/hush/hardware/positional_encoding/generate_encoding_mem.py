@@ -2,8 +2,8 @@
 
 import math
 from pathlib import Path
-
-
+import torch
+import numpy as np
 WIDTH = 16
 FRAC_BITS = 12
 MAX_TIMESCALE = 10000
@@ -30,10 +30,17 @@ def to_hex_word(value: int, width: int = WIDTH) -> str:
 
 def build_frequency_lut(depth: int = HALF_STATE) -> list[int]:
     log_timescale_increment = math.log(MAX_TIMESCALE) / (depth - 1)
-    return [
-        quantize_q4_12(math.exp(-log_timescale_increment * index))
-        for index in range(depth)
-    ]
+    inv_timescales = [quantize_q4_12(math.exp(-log_timescale_increment * index)) for index in range(depth)]
+    max_timescale=10000
+    channels = 2 * depth
+    log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales2 = torch.exp(
+        -log_timescale_increment * torch.arange(channels // 2, dtype=torch.float32)
+    )
+    print(inv_timescales)
+    print(inv_timescales2)
+    return inv_timescales
+    
 
 
 def build_sine_lut(depth: int = SIN_LUT_DEPTH) -> list[int]:

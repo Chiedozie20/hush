@@ -16,7 +16,7 @@ module positional_encoding #(
     localparam int STATE_W = (N_STATE > 1) ? $clog2(N_STATE) : 1;
     localparam int FREQ_IDX_W = (HALF_STATE > 1) ? $clog2(HALF_STATE) : 1;
     localparam int PHASE_WIDTH = WIDTH + WPOS + 1;
-    localparam int SIN_ROM_LATENCY = 2;
+    localparam int SIN_ROM_LATENCY = 3;
 
     logic [0:N_STATE-1][WIDTH-1:0] x_latched;
     logic [WPOS-1:0]  position_latched;
@@ -129,7 +129,7 @@ module positional_encoding #(
                 issue_valid_d <= 1'b1;
                 state_idx_d <= issue_ctr;
                 x_value_d <= x_latched[issue_ctr];
-                cos_d <= (issue_ctr >= (HALF_STATE - 1)); // TODO investigate -1 fix
+                cos_d <= (issue_ctr >= (HALF_STATE)); // TODO investigate -1 fix
 
                 if (issue_ctr == N_STATE - 1) begin
                     issue_done <= 1'b1;

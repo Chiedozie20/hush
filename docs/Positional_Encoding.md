@@ -52,3 +52,9 @@ sys     0m1.016s
 
 bug :
 switch to cosine in 193 instead of 192 due to latency 
+
+
+
+first failing position=3
+idx | x_value | received | expected | abs_diff
+205 |    1273 |     1399 |     1142 |  257

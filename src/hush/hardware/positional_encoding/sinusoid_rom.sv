@@ -20,6 +20,7 @@ module sinusoid_rom #(
     logic signed [WIDTH-1:0] rom [0:LUT_DEPTH-1];
     logic [ADDR_W-1:0]       addr_q;
     logic                    negate_q;
+    logic                    negate_qq;
     logic signed [WIDTH-1:0] rom_data_q;
 
     logic signed [PHASE_WIDTH-1:0] phase_adj;
@@ -63,8 +64,9 @@ module sinusoid_rom #(
     always_ff @(posedge i_clk) begin
         addr_q <= addr_d;
         negate_q <= negate_d;
+        negate_qq <= negate_q;
         rom_data_q <= rom[addr_q];
-        o_sin <= negate_q ? -rom_data_q : rom_data_q;
+        o_sin <= negate_qq ? -rom_data_q : rom_data_q;
     end
 
 endmodule
