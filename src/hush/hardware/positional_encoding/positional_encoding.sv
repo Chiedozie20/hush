@@ -129,7 +129,7 @@ module positional_encoding #(
                 issue_valid_d <= 1'b1;
                 state_idx_d <= issue_ctr;
                 x_value_d <= x_latched[issue_ctr];
-                cos_d <= (issue_ctr >= (HALF_STATE - 1));
+                cos_d <= (issue_ctr >= (HALF_STATE - 1)); // TODO investigate -1 fix
 
                 if (issue_ctr == N_STATE - 1) begin
                     issue_done <= 1'b1;
