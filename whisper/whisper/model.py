@@ -11,7 +11,7 @@ from torch import Tensor, nn
 
 from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
-from .quantise import Conv1dInteger, LinearInteger
+from .quantise import Conv1dInteger, LinearInteger, _integer_quantize
 from .transcribe import transcribe as transcribe_function
 
 # try:
@@ -78,8 +78,35 @@ class Conv1d(nn.Conv1d):
 def sinusoids(length, channels, max_timescale=10000):
     assert channels % 2 == 0
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    inv_timescales = _integer_quantize(torch.exp(-log_timescale_increment * torch.arange(channels // 2)), 16, 12)
+    print(inv_timescales)
     scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+    return _integer_quantize(torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1), 16, 12)
+
+
+def sinusoids_tied(length, channels, max_timescale=10000, N=1, K=1):
+    assert channels % 2 == 0
+    half = channels // 2
+
+    # Tie rows: every N rows share one p
+    p = (torch.arange(length) // N).float()
+    print(p)
+    # Tie columns: every K columns share one f
+    num_freqs = (half + K - 1) // K
+
+    if num_freqs == 1:
+        unique_f = torch.tensor([1.0], dtype=torch.float32)
+    else:
+        log_timescale_increment = np.log(max_timescale) / (num_freqs - 1)
+        unique_f = torch.exp(
+            -log_timescale_increment * torch.arange(num_freqs, dtype=torch.float32)
+        )
+
+    f_idx = torch.arange(half) // K
+    f = unique_f[f_idx]
+
+    scaled_time = p[:, None] * f[None, :]
+    print( torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
     return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
 
@@ -243,7 +270,9 @@ class AudioEncoder(nn.Module):
         else:
             self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
-        self.register_buffer("positional_embedding", sinusoids(n_ctx, n_state))
+        # assert sinusoids(n_ctx, n_state) == sinusoids_tied(n_ctx, n_state)
+        self.register_buffer("positional_embedding", torch.full((1500, 384), 10000))# sinusoids_tied(n_ctx, n_state, 10000, 16, 16))
+        self.embedding = sinusoids(n_ctx, n_state)# sinusoids_tied(n_ctx, n_state, 10000, 3, 4) 
         print(f"ctx {n_ctx};  n_state {n_state}")
         self.blocks = nn.ModuleList(
             [
@@ -262,10 +291,10 @@ class AudioEncoder(nn.Module):
         x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
         x = x.permute(0, 2, 1)
-        assert x.shape[1:] == self.positional_embedding.shape, "incorrect audio shape"
-        print(f"x shape {x.shape} \nPositional embedding shape {self.positional_embedding.shape} \n flattened shape {torch.flatten(self.positional_embedding).shape}")
-        
-        x = (x + self.positional_embedding).to(x.dtype)
+        assert x.shape[1:] == self.embedding.shape, "incorrect audio shape"
+        print(f"x shape {x.shape} \nPositional embedding shape {self.embedding.shape} \n flattened shape {torch.flatten(self.positional_embedding).shape}")
+        print(self.embedding)
+        x = (_integer_quantize(x,16,12) + self.embedding).to(x.dtype)
 
         for block in self.blocks:
             x = block(x)

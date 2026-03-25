@@ -153,7 +153,10 @@ def simple_whisper_inference(path: Path) -> str:
 
 def benchmark_WER(model):
     dataset = LibriSpeech("test-clean")
-    dataset = torch.utils.data.Subset(dataset, range(10,20))
+    gen = torch.Generator().manual_seed(42)
+    indices = torch.randperm(len(dataset), generator=gen)[:100]
+    # dataset = torch.utils.data.Subset(dataset, indices.tolist())
+    dataset = torch.utils.data.Subset(dataset, range(100))
     loader = torch.utils.data.DataLoader(dataset, batch_size=16)
     print(
         f"Model is {'multilingual' if model.is_multilingual else 'English-only'} "
