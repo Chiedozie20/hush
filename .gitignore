@@ -11,3 +11,4 @@
 *.fst
 *.xml
 *.mem
+src/hush/hardware/positional_encoding/log.txt
