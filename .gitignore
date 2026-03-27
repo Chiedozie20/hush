@@ -1,0 +1,15 @@
+*.direnv/
+*.venv/
+.envrc.local
+**/__pycache__
+*.pyc
+*.obsidian/
+*.egg-info/
+
+**/sim_build
+*.vcd
+*.fst
+*.xml
+*.mem
+src/hush/hardware/positional_encoding/log.txt
+**/anneal_log.json
